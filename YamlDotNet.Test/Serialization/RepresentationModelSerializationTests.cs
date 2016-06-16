@@ -13,39 +13,67 @@ namespace YamlDotNet.Test.Serialization
 {
     public class RepresentationModelSerializationTests
     {
-        [Fact]
-        public void X()
+        [Theory]
+        [InlineData("hello", "hello")]
+        [InlineData("'hello'", "hello")]
+        [InlineData("\"hello\"", "hello")]
+        [InlineData("!!int 123", "123")]
+        public void ScalarIsSerializable(string yaml, string expectedValue)
         {
             var deserializer = new Deserializer();
-            deserializer.RegisterTagMapping("tag:yaml.org,2002:binary", typeof(byte[]));
-            deserializer.RegisterTypeConverter(new ByteArrayConverter());
+            var node = deserializer.Deserialize<YamlScalarNode>(Yaml.ReaderForText(yaml));
 
-            var scalar = deserializer.Deserialize<YamlScalarNode>(new StringReader("!!int 123"));
-            var mapping = deserializer.Deserialize<YamlMappingNode>(new StringReader("{ a: b, c: d }"));
-            var sequence = deserializer.Deserialize<YamlSequenceNode>(new StringReader("[ 1, { 2: 2.5 }, 3 ]"));
-
-            var bytes = deserializer.Deserialize<byte[]>(new StringReader("!!binary R0lG"));
+            Assert.NotNull(node);
+            Assert.Equal(expectedValue, node.Value);
 
             var serializer = new Serializer();
-            serializer.RegisterTypeConverter(new ByteArrayConverter());
-
             var buffer = new StringWriter();
-            serializer.Serialize(buffer, new
+            serializer.Serialize(buffer, node);
+            Assert.Equal(yaml, buffer.ToString().TrimEnd('\r', '\n', '.'));
+        }
+
+        [Theory]
+        [InlineData("[a]", new[] { "a" })]
+        [InlineData("['a']", new[] { "a" })]
+        [InlineData("- a\r\n- b", new[] { "a", "b" })]
+        public void SequenceIsSerializable(string yaml, string[] expectedValues)
+        {
+            var deserializer = new Deserializer();
+            var node = deserializer.Deserialize<YamlSequenceNode>(Yaml.ReaderForText(yaml));
+
+            Assert.NotNull(node);
+            Assert.Equal(expectedValues.Length, node.Children.Count);
+            for (int i = 0; i < expectedValues.Length; i++)
             {
-                Scalar = new YamlScalarNode("hello") { Tag = "!!int",  },
-                Scalar2 = scalar,
-                Mapping = new YamlMappingNode(
-                    "Id", "1",
-                    "Name", "hello"
-                ),
-                Mapping2 = mapping,
-                Sequence = new YamlSequenceNode("a", "b", "c"),
-                Sequence2 = sequence,
+                Assert.Equal(expectedValues[i], ((YamlScalarNode)node.Children[i]).Value);
+            }
 
-                binary = new byte[] { 1, 2, 3 }
-            });
+            var serializer = new Serializer();
+            var buffer = new StringWriter();
+            serializer.Serialize(buffer, node);
+            Assert.Equal(yaml, buffer.ToString().TrimEnd('\r', '\n', '.'));
+        }
 
-            var yaml = buffer.ToString();
+        [Theory]
+        [InlineData("{a: b}", new[] { "a", "b" })]
+        [InlineData("{'a': \"b\"}", new[] { "a", "b" })]
+        [InlineData("a: b\r\nc: d", new[] { "a", "b", "c", "d" })]
+        public void MappingIsSerializable(string yaml, string[] expectedKeysAndValues)
+        {
+            var deserializer = new Deserializer();
+            var node = deserializer.Deserialize<YamlMappingNode>(Yaml.ReaderForText(yaml));
+
+            Assert.NotNull(node);
+            Assert.Equal(expectedKeysAndValues.Length / 2, node.Children.Count);
+            for (int i = 0; i < expectedKeysAndValues.Length; i += 2)
+            {
+                Assert.Equal(expectedKeysAndValues[i + 1], ((YamlScalarNode)node.Children[expectedKeysAndValues[i]]).Value);
+            }
+
+            var serializer = new Serializer();
+            var buffer = new StringWriter();
+            serializer.Serialize(buffer, node);
+            Assert.Equal(yaml, buffer.ToString().TrimEnd('\r', '\n', '.'));
         }
     }
 
